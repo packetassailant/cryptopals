@@ -1,3 +1,9 @@
+// Code to implement repeating key XOR
+// 1. STDIN string
+// 2. String to Byte slice
+// 3. Perform byte for byte (idx) XOR using supplied key
+// 4. Print results using hexidecimal format
+
 package main
 
 import (
