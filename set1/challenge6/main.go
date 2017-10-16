@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"sort"
+
+	"github.com/spf13/pflag"
 
 	b64 "encoding/base64"
 )
@@ -20,13 +23,28 @@ type cipherTexts struct {
 	ct5 string
 }
 
-var ctMap = map[int]*cipherTexts{}
+var (
+	flags   = pflag.FlagSet{SortFlags: false}
+	ctMap   = map[int]*cipherTexts{}
+	opts    cmdLineOpts
+	charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.' \\"
+)
+
+type cmdLineOpts struct {
+	infile       string
+	cipherOne    string
+	cipherTwo    string
+	minKeySize   int
+	maxKeySize   int
+	numBlockSize int
+	keyBlockSize int
+}
 
 func generateKeys(s string) map[int]*cipherTexts {
 	b := []byte(s)
 	bReader := bytes.NewReader(b)
 
-	for i := 2; i <= 40; i++ {
+	for i := opts.minKeySize; i <= opts.maxKeySize; i++ {
 		keysize1 := make([]byte, i)
 		keysize2 := make([]byte, i)
 		keysize3 := make([]byte, i)
@@ -49,36 +67,31 @@ func generateKeys(s string) map[int]*cipherTexts {
 	return ctMap
 }
 
-func getHammingValue(bm map[int]string, key int) float64 {
-	var (
-		c0  = 0.00
-		c1  = 0.00
-		c2  = 0.00
-		c3  = 0.00
-		avg = 0.00
-	)
-
-	bm0 := []rune(bm[0])
-	bm1 := []rune(bm[1])
-	bm2 := []rune(bm[2])
-	bm3 := []rune(bm[3])
-	bm4 := []rune(bm[4])
-
-	for i := 0; i < len(bm0); i++ {
-		if bm0[i] != bm1[i] {
-			c0++
-		}
-		if bm1[i] != bm2[i] {
-			c1++
-		}
-		if bm2[i] != bm3[i] {
-			c2++
-		}
-		if bm3[i] != bm4[i] {
-			c3++
+func getHammingValue(s1, s2 string) int {
+	count := 0
+	for i := 0; i < len(s1); i++ {
+		if s1[i] != s2[i] {
+			count++
 		}
 	}
-	avg = (c0/float64(key) + c1/float64(key) + c2/float64(key) + c3/float64(key)) / 4
+	return count
+}
+
+func getHammingValues(bm map[int]string, key int) float64 {
+	var keys []int
+	for k := range bm {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+	countTotal := 0.00
+	for k := 0; k < len(keys); k++ {
+		if k >= 1 {
+			prev := k - 1
+			hamCount := getHammingValue(bm[prev], bm[k])
+			countTotal += float64(hamCount) / float64(key)
+		}
+	}
+	avg := countTotal / 4
 	return avg
 }
 
@@ -95,34 +108,142 @@ func keyToBin(s ...string) map[int]string {
 	return binMap
 }
 
+func getKeySizeBlocks(bs int, file string) []string {
+	b := []byte(file)
+	bReader := bytes.NewReader(b)
+	blockSlice := []string{}
+	for true {
+		block := make([]byte, bs)
+		_, err := bReader.Read(block)
+		if err == io.EOF {
+			break
+		}
+		blockSlice = append(blockSlice, string(block))
+	}
+	return blockSlice
+}
+
+func transposeBlocks(bs []string) map[int][]byte {
+	transMap := map[int][]byte{}
+	for x := 0; x < opts.keyBlockSize; x++ {
+		transSlice := []byte{}
+		for _, v := range bs {
+			transSlice = append(transSlice, v[x])
+		}
+		transMap[x] = transSlice
+	}
+	return transMap
+}
+
+func encodeDecode(input []byte, key string) []byte {
+	var bArr = make([]byte, len(input))
+	for i := 0; i < len(input); i++ {
+		bArr[i] += input[i] ^ key[i%len(key)]
+	}
+	return bArr
+}
+
+func scoreChars(text []byte) int {
+	count := 0
+
+	for _, x := range text {
+		for _, y := range charSet {
+			if byte(y) == x {
+				count = count + 1
+			}
+		}
+	}
+	return count
+}
+
+func init() {
+	flags.StringVarP(&opts.infile, "infile", "i", "", "FILEPATH to a encrypted file")
+	flags.StringVar(&opts.cipherOne, "c1", "", "INITIAL cipher string for Hamming Distance comparison")
+	flags.StringVar(&opts.cipherTwo, "c2", "", "SECOND cipher string for Hamming Distance comparison")
+	flags.IntVar(&opts.minKeySize, "min", 2, "The MINIMUM keysize")
+	flags.IntVar(&opts.maxKeySize, "max", 40, "The MAXIMUM keysize")
+	flags.IntVar(&opts.numBlockSize, "numblock", 4, "Number of blocks to test based on single KEYSIZE")
+	flags.IntVar(&opts.keyBlockSize, "keyblock", 0, "Size of block based on KEYSIZE length")
+	flags.Usage = usage
+	flags.Parse(os.Args[1:])
+
+	if flags.NFlag() == 0 {
+		flags.PrintDefaults()
+		os.Exit(1)
+	}
+	if opts.infile == "" && (opts.cipherOne == "" || opts.cipherTwo == "") {
+		log.Fatal("Fatal: Either --infile or --c1 and --c2 value is required")
+	}
+}
+
+func usage() {
+	fmt.Fprintf(os.Stderr, "Example Usage: %s --c1 'this is a test' --c2 'wokka wokka!!!'\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Example Usage: %s -i encfile.raw --min 4 --max 50 --numblock\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Example Usage: %s --keyblock 13 -i encfile.raw\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Flags: %s {OPTION]...\n", os.Args[0])
+	flags.PrintDefaults()
+	os.Exit(0)
+}
+
 func main() {
-	file := flag.String("file", "", "The encrypted file")
-	flag.Parse()
-
-	fileBytes, err := ioutil.ReadFile(*file)
-	fileStr := fmt.Sprintf("%s", fileBytes)
-	decFileBytes, _ := b64.StdEncoding.DecodeString(fileStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	decFileStr := fmt.Sprintf("%s", decFileBytes)
-
-	cm := generateKeys(decFileStr)
-	var keys []int
-	for k := range cm {
-		keys = append(keys, k)
-	}
-	sort.Ints(keys)
-	for _, k := range keys {
-		fmt.Printf("Processing key: %d\n", k)
-		binMap := keyToBin(
-			cm[k].ct1,
-			cm[k].ct2,
-			cm[k].ct3,
-			cm[k].ct4,
-			cm[k].ct5,
-		)
-		hamCount := getHammingValue(binMap, k)
-		fmt.Printf("Hamming Distance: %.4f\n", hamCount)
+	if opts.cipherOne != "" && opts.cipherTwo != "" {
+		bm := keyToBin(opts.cipherOne, opts.cipherTwo)
+		hamCount := getHammingValue(bm[0], bm[1])
+		fmt.Printf("Hamming Distance: %d\n", hamCount)
+	} else if opts.keyBlockSize != 0 && opts.infile != "" {
+		fileBytes, err := ioutil.ReadFile(opts.infile)
+		fileStr := fmt.Sprintf("%s", fileBytes)
+		decFileBytes, _ := b64.StdEncoding.DecodeString(fileStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		decFileStr := fmt.Sprintf("%s", decFileBytes)
+		blockSlice := getKeySizeBlocks(opts.keyBlockSize, decFileStr)
+		transMap := transposeBlocks(blockSlice)
+		var keys []int
+		for k := range transMap {
+			keys = append(keys, k)
+		}
+		sort.Ints(keys)
+		for _, k := range keys {
+			fmt.Println(transMap[k])
+		}
+		// Start here rewriting the XOR logic
+	} else if opts.infile != "" {
+		fileBytes, err := ioutil.ReadFile(opts.infile)
+		fileStr := fmt.Sprintf("%s", fileBytes)
+		decFileBytes, _ := b64.StdEncoding.DecodeString(fileStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		decFileStr := fmt.Sprintf("%s", decFileBytes)
+		cm := generateKeys(decFileStr)
+		var keys []int
+		for k := range cm {
+			keys = append(keys, k)
+		}
+		sort.Ints(keys)
+		hcMap := make(map[float64]int)
+		for _, k := range keys {
+			binMap := keyToBin(
+				cm[k].ct1,
+				cm[k].ct2,
+				cm[k].ct3,
+				cm[k].ct4,
+				cm[k].ct5,
+			)
+			hamCount := getHammingValues(binMap, k)
+			hcMap[hamCount] = k
+		}
+		var hckeys []float64
+		for k := range hcMap {
+			hckeys = append(hckeys, k)
+		}
+		sort.Float64s(hckeys)
+		fmt.Println("*********Keys Sorted by Hamming Distance*********")
+		for _, k := range hckeys {
+			fmt.Printf("Processing key: %d\n", hcMap[k])
+			fmt.Printf("Normalized Hamming Distance: %.4f\n", k)
+		}
 	}
 }
