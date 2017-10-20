@@ -34,10 +34,46 @@ type cmdLineOpts struct {
 	infile       string
 	cipherOne    string
 	cipherTwo    string
+	key          string
 	minKeySize   int
 	maxKeySize   int
 	numBlockSize int
 	keyBlockSize int
+	decode64     bool
+}
+
+func init() {
+	flags.StringVarP(&opts.infile, "infile", "i", "", "FILEPATH to a encrypted file")
+	flags.StringVar(&opts.cipherOne, "c1", "", "INITIAL cipher string for Hamming Distance comparison")
+	flags.StringVar(&opts.cipherTwo, "c2", "", "SECOND cipher string for Hamming Distance comparison")
+	flags.IntVar(&opts.minKeySize, "min", 2, "The MINIMUM keysize")
+	flags.IntVar(&opts.maxKeySize, "max", 40, "The MAXIMUM keysize")
+	flags.IntVar(&opts.numBlockSize, "numblock", 4, "Number of blocks to test based on single KEYSIZE")
+	flags.IntVar(&opts.keyBlockSize, "keyblock", 0, "Size of block based on KEYSIZE length")
+	flags.StringVar(&opts.key, "key", "", "The symmetric XOR key")
+	flags.BoolVar(&opts.decode64, "decode64", false, "Helper to Base64 decode file")
+
+	flags.Usage = usage
+	flags.Parse(os.Args[1:])
+
+	if flags.NFlag() == 0 {
+		flags.PrintDefaults()
+		os.Exit(1)
+	}
+	if opts.infile == "" && (opts.cipherOne == "" || opts.cipherTwo == "") {
+		log.Fatal("Fatal: Either --infile or --c1 and --c2 value is required")
+	}
+}
+
+func usage() {
+	fmt.Fprintf(os.Stderr, "Example Usage(One Edit Distance): %s --c1 'this is a test' --c2 'wokka wokka!!!'\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Example Usage(Bulk Edit Distance): %s -i encfile.raw --min 4 --max 50 --numblock\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Example Usage(Score Blocks): %s --keyblock 13 -i encfile.raw\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Example Usage(Decrypt file): %s --infile=raw.txt --key='the symmetric XOR key'\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Example Usage(B64 decode): %s --infile=enc.txt --decode64\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Flags: %s {OPTION]...\n", os.Args[0])
+	flags.PrintDefaults()
+	os.Exit(0)
 }
 
 func generateKeys(s string) map[int]*cipherTexts {
@@ -156,33 +192,28 @@ func scoreChars(text []byte) int {
 	return count
 }
 
-func init() {
-	flags.StringVarP(&opts.infile, "infile", "i", "", "FILEPATH to a encrypted file")
-	flags.StringVar(&opts.cipherOne, "c1", "", "INITIAL cipher string for Hamming Distance comparison")
-	flags.StringVar(&opts.cipherTwo, "c2", "", "SECOND cipher string for Hamming Distance comparison")
-	flags.IntVar(&opts.minKeySize, "min", 2, "The MINIMUM keysize")
-	flags.IntVar(&opts.maxKeySize, "max", 40, "The MAXIMUM keysize")
-	flags.IntVar(&opts.numBlockSize, "numblock", 4, "Number of blocks to test based on single KEYSIZE")
-	flags.IntVar(&opts.keyBlockSize, "keyblock", 0, "Size of block based on KEYSIZE length")
-	flags.Usage = usage
-	flags.Parse(os.Args[1:])
+func extractKey(keys []int, transMap map[int][]byte) []byte {
+	keySlice := []byte{}
 
-	if flags.NFlag() == 0 {
-		flags.PrintDefaults()
-		os.Exit(1)
+	for _, k := range keys {
+		scoreHolder := 0
+		highXorScore := ""
+		var highChar []byte
+		fmt.Println("Processing Key: ", k)
+		for x := 0; x <= 255; x++ {
+			c := fmt.Sprintf("%c", x)
+			results := encodeDecode(transMap[k], c)
+			if scoreChars(results) > scoreHolder {
+				highChar = []byte(c)
+				scoreHolder = scoreChars(results)
+				highXorScore = string(results)
+			}
+		}
+		keySlice = append(keySlice, highChar[0])
+		fmt.Println(scoreHolder)
+		fmt.Println(highXorScore)
 	}
-	if opts.infile == "" && (opts.cipherOne == "" || opts.cipherTwo == "") {
-		log.Fatal("Fatal: Either --infile or --c1 and --c2 value is required")
-	}
-}
-
-func usage() {
-	fmt.Fprintf(os.Stderr, "Example Usage: %s --c1 'this is a test' --c2 'wokka wokka!!!'\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Example Usage: %s -i encfile.raw --min 4 --max 50 --numblock\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Example Usage: %s --keyblock 13 -i encfile.raw\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Flags: %s {OPTION]...\n", os.Args[0])
-	flags.PrintDefaults()
-	os.Exit(0)
+	return keySlice
 }
 
 func main() {
@@ -190,7 +221,7 @@ func main() {
 		bm := keyToBin(opts.cipherOne, opts.cipherTwo)
 		hamCount := getHammingValue(bm[0], bm[1])
 		fmt.Printf("Hamming Distance: %d\n", hamCount)
-	} else if opts.keyBlockSize != 0 && opts.infile != "" {
+	} else if opts.decode64 && opts.infile != "" {
 		fileBytes, err := ioutil.ReadFile(opts.infile)
 		fileStr := fmt.Sprintf("%s", fileBytes)
 		decFileBytes, _ := b64.StdEncoding.DecodeString(fileStr)
@@ -198,6 +229,20 @@ func main() {
 			log.Fatal(err)
 		}
 		decFileStr := fmt.Sprintf("%s", decFileBytes)
+		fmt.Println(decFileStr)
+	} else if opts.key != "" && opts.infile != "" {
+		fileBytes, err := ioutil.ReadFile(opts.infile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result := encodeDecode(fileBytes, opts.key)
+		fmt.Println(string(result))
+	} else if opts.keyBlockSize != 0 && opts.infile != "" {
+		fileBytes, err := ioutil.ReadFile(opts.infile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		decFileStr := fmt.Sprintf("%s", fileBytes)
 		blockSlice := getKeySizeBlocks(opts.keyBlockSize, decFileStr)
 		transMap := transposeBlocks(blockSlice)
 		var keys []int
@@ -205,18 +250,14 @@ func main() {
 			keys = append(keys, k)
 		}
 		sort.Ints(keys)
-		for _, k := range keys {
-			fmt.Println(transMap[k])
-		}
-		// Start here rewriting the XOR logic
+		encKey := extractKey(keys, transMap)
+		fmt.Printf("The encryption key: %s\n", encKey)
 	} else if opts.infile != "" {
 		fileBytes, err := ioutil.ReadFile(opts.infile)
-		fileStr := fmt.Sprintf("%s", fileBytes)
-		decFileBytes, _ := b64.StdEncoding.DecodeString(fileStr)
 		if err != nil {
 			log.Fatal(err)
 		}
-		decFileStr := fmt.Sprintf("%s", decFileBytes)
+		decFileStr := fmt.Sprintf("%s", fileBytes)
 		cm := generateKeys(decFileStr)
 		var keys []int
 		for k := range cm {
