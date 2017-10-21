@@ -1,3 +1,7 @@
+// Code to implement AES ECB
+// 1. Base64 decode to get ciphertext
+// 2. Decrypt ciphertext (AES 128) with 16 byte key
+
 package main
 
 import (
@@ -13,17 +17,13 @@ func decryptAes128Ecb(ciphertext, key []byte) []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	plaintext := make([]byte, len(ciphertext))
-	bs := len(key)
-	for len(ciphertext) > 0 {
-		cipher.Decrypt(ciphertext, plaintext)
-		ciphertext = ciphertext[bs:]
-		plaintext = plaintext[bs:]
-	}
-	//Start here
+	blocksize := 16
 
-	return []byte("4")
+	for bs, be := 0, blocksize; bs < len(ciphertext); bs, be = bs+blocksize, be+blocksize {
+		cipher.Decrypt(plaintext[bs:be], ciphertext[bs:be])
+	}
+	return plaintext
 }
 
 func main() {
@@ -38,5 +38,5 @@ func main() {
 	k := []byte(*key)
 
 	result := decryptAes128Ecb(fileBytes, k)
-	fmt.Println(result)
+	fmt.Printf("%s", result)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -9,10 +10,9 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/spf13/pflag"
-
-	b64 "encoding/base64"
 )
 
 type cipherTexts struct {
@@ -223,13 +223,12 @@ func main() {
 		fmt.Printf("Hamming Distance: %d\n", hamCount)
 	} else if opts.decode64 && opts.infile != "" {
 		fileBytes, err := ioutil.ReadFile(opts.infile)
-		fileStr := fmt.Sprintf("%s", fileBytes)
-		decFileBytes, _ := b64.StdEncoding.DecodeString(fileStr)
+		cleanString := strings.TrimSpace(string(fileBytes))
+		decFileBytes, err := base64.StdEncoding.DecodeString(cleanString)
 		if err != nil {
 			log.Fatal(err)
 		}
-		decFileStr := fmt.Sprintf("%s", decFileBytes)
-		fmt.Println(decFileStr)
+		fmt.Print(string(decFileBytes))
 	} else if opts.key != "" && opts.infile != "" {
 		fileBytes, err := ioutil.ReadFile(opts.infile)
 		if err != nil {
@@ -257,8 +256,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		decFileStr := fmt.Sprintf("%s", fileBytes)
-		cm := generateKeys(decFileStr)
+		cm := generateKeys(string(fileBytes))
 		var keys []int
 		for k := range cm {
 			keys = append(keys, k)
