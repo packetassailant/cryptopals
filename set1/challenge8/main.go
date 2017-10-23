@@ -35,7 +35,7 @@ func readFile(fn string) (err error) {
 		for a := 0; a < len(cipherSlice)-1; a++ {
 			for b := a + 1; b < len(cipherSlice); b++ {
 				if reflect.DeepEqual(cipherSlice[a], cipherSlice[b]) {
-					fmt.Printf("Found a block match of %v at postion %d\n", cipherSlice[a], b)
+					fmt.Printf("Found a block match of %v at position %d\n", cipherSlice[a], b)
 				}
 			}
 		}
