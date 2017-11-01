@@ -12,7 +12,7 @@ import (
 	"log"
 )
 
-func decryptAes128Ecb(ciphertext, key []byte) []byte {
+func decryptAes128(ciphertext, key []byte) []byte {
 	cipher, err := aes.NewCipher(key)
 	if err != nil {
 		log.Fatal(err)
@@ -37,6 +37,6 @@ func main() {
 	}
 	k := []byte(*key)
 
-	result := decryptAes128Ecb(fileBytes, k)
+	result := decryptAes128(fileBytes, k)
 	fmt.Printf("%s", result)
 }
