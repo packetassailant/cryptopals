@@ -1,14 +1,18 @@
 package main
 
-import "github.com/packetassailant/cryptopals/set2/challenge11/rand"
-import "fmt"
+import (
+	"fmt"
+	"log"
 
-func randEncrypt() {
-	i := rand.StringWithVarLength(1, 2)
-	fmt.Println(i)
+	"github.com/packetassailant/cryptopals/set2/challenge11/crypt"
+	"github.com/packetassailant/cryptopals/set2/challenge11/rand"
+)
+
+func selectEncrypt() int {
+	return rand.StringWithVarLength(1, 2)
 }
 
-func encryptionOracle(s string) {
+func encryptionOracle(s string) (ciphertext []byte, err error) {
 	key := rand.String(16)
 	fmt.Println(key)
 
@@ -17,13 +21,21 @@ func encryptionOracle(s string) {
 	ptBytes = append(pre, ptBytes...)
 	post := rand.GenRandBytes(5, 10)
 	ptBytes = append(ptBytes, post...)
-	fmt.Println(string(ptBytes))
+	i := selectEncrypt()
+	switch i {
+	case 1:
+		return crypt.EncryptAesCBC(ptBytes, []byte(key))
+
+	case 2:
+		return crypt.EncryptAesECB(ptBytes, []byte(key))
+	}
+	return
 }
 
 func main() {
-	// encryptionOracle("this is a test")
-	for x := 0; x < 1000; x++ {
-		randEncrypt()
+	ciphertext, err := encryptionOracle("this is a test")
+	if err != nil {
+		log.Fatalf("Error: %s", err)
 	}
-
+	fmt.Println(ciphertext)
 }
