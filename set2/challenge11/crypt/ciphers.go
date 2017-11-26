@@ -5,9 +5,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
+	"reflect"
 )
 
 // Appends padding. (Borrowed from Golang Examples)
@@ -47,6 +47,22 @@ func pkcs7Unpad(data []byte, blocklen int) ([]byte, error) {
 	return data[:len(data)-padlen], nil
 }
 
+//DetectOracle identifies stateless and deterministic blocks
+func DetectOracle(ciphertext []byte, blocksize int) string {
+	var cipherSlice [][]byte
+	for bs, be := 0, blocksize; bs < len(ciphertext); bs, be = bs+blocksize, be+blocksize {
+		cipherSlice = append(cipherSlice, ciphertext[bs:be])
+	}
+	for a := 0; a < len(cipherSlice)-1; a++ {
+		for b := a + 1; b < len(cipherSlice); b++ {
+			if reflect.DeepEqual(cipherSlice[a], cipherSlice[b]) {
+				return fmt.Sprintln("Found ECB block mode encryption")
+			}
+		}
+	}
+	return fmt.Sprintln("Found CBC block mode encryption")
+}
+
 //EncryptAesECB symmetric encrypt using ECB cipher
 func EncryptAesECB(plaintext, key []byte) (ciphertext []byte, err error) {
 	msg, err := pkcs7Pad(plaintext, len(key))
@@ -55,6 +71,7 @@ func EncryptAesECB(plaintext, key []byte) (ciphertext []byte, err error) {
 		return nil, err
 	}
 	ciphertext = make([]byte, len(msg))
+
 	blocksize := len(key)
 	for bs, be := 0, blocksize; bs < len(ciphertext); bs, be = bs+blocksize, be+blocksize {
 		block.Encrypt(ciphertext[bs:be], msg[bs:be])
@@ -74,8 +91,8 @@ func EncryptAesCBC(plaintext, key []byte) (ciphertext []byte, err error) {
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 		panic(err)
 	}
-	fmt.Printf("CBC Key: %s\n", hex.EncodeToString(key))
-	fmt.Printf("CBC IV: %s\n", hex.EncodeToString(iv))
+	// fmt.Printf("CBC Key: %s\n", hex.EncodeToString(key))
+	// fmt.Printf("CBC IV: %s\n", hex.EncodeToString(iv))
 
 	cbc := cipher.NewCBCEncrypter(block, iv)
 	cbc.CryptBlocks(ciphertext[aes.BlockSize:], msg)
