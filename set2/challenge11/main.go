@@ -10,8 +10,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/packetassailant/cryptopals/set2/challenge11/crypt"
-	"github.com/packetassailant/cryptopals/set2/challenge11/rand"
+	"github.com/packetassailant/cryptopals/crypt"
+	"github.com/packetassailant/cryptopals/rand"
 )
 
 const keysize = 16
