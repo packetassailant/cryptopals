@@ -56,7 +56,7 @@ func DetectOracle(ciphertext []byte, blocksize int) string {
 	for a := 0; a < len(cipherSlice)-1; a++ {
 		for b := a + 1; b < len(cipherSlice); b++ {
 			if reflect.DeepEqual(cipherSlice[a], cipherSlice[b]) {
-				return fmt.Sprintln("Found ECB block mode encryption")
+				return fmt.Sprint("Found ECB block mode encryption")
 			}
 		}
 	}
@@ -66,6 +66,7 @@ func DetectOracle(ciphertext []byte, blocksize int) string {
 //EncryptAesECB symmetric encrypt using ECB cipher
 func EncryptAesECB(plaintext, key []byte) (ciphertext []byte, err error) {
 	msg, err := pkcs7Pad(plaintext, len(key))
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
