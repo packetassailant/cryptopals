@@ -7,11 +7,12 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"log"
 	"reflect"
 )
 
-// Appends padding. (Borrowed from Golang Examples)
-func pkcs7Pad(data []byte, blocklen int) ([]byte, error) {
+//Pkcs7Pad appends padding. (Borrowed from Golang Examples)
+func Pkcs7Pad(data []byte, blocklen int) ([]byte, error) {
 	if blocklen <= 0 {
 		return nil, fmt.Errorf("invalid blocklen %d", blocklen)
 	}
@@ -24,8 +25,8 @@ func pkcs7Pad(data []byte, blocklen int) ([]byte, error) {
 	return append(data, pad...), nil
 }
 
-// Returns slice of the original data without padding.  (Borrowed from Golang Examples)
-func pkcs7Unpad(data []byte, blocklen int) ([]byte, error) {
+//Pkcs7Unpad returns slice of the original data without padding.  (Borrowed from Golang Examples)
+func Pkcs7Unpad(data []byte, blocklen int) ([]byte, error) {
 	if blocklen <= 0 {
 		return nil, fmt.Errorf("invalid blocklen %d", blocklen)
 	}
@@ -65,7 +66,7 @@ func DetectOracle(ciphertext []byte, blocksize int) string {
 
 //EncryptAesECB symmetric encrypt using ECB cipher
 func EncryptAesECB(plaintext, key []byte) (ciphertext []byte, err error) {
-	msg, err := pkcs7Pad(plaintext, len(key))
+	msg, err := Pkcs7Pad(plaintext, len(key))
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -82,7 +83,7 @@ func EncryptAesECB(plaintext, key []byte) (ciphertext []byte, err error) {
 
 //EncryptAesCBC symmetric encrypt using CBC cipher
 func EncryptAesCBC(plaintext, key []byte) (ciphertext []byte, err error) {
-	msg, err := pkcs7Pad(plaintext, len(key))
+	msg, err := Pkcs7Pad(plaintext, len(key))
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -99,4 +100,21 @@ func EncryptAesCBC(plaintext, key []byte) (ciphertext []byte, err error) {
 	cbc.CryptBlocks(ciphertext[aes.BlockSize:], msg)
 
 	return
+}
+
+//DecryptAes128 AES decryption function
+func DecryptAes128(ciphertext, key []byte) []byte {
+	cipher, err := aes.NewCipher(key)
+
+	plaintext := make([]byte, len(ciphertext))
+	blocksize := len(key)
+
+	for bs, be := 0, blocksize; bs < len(ciphertext); bs, be = bs+blocksize, be+blocksize {
+		cipher.Decrypt(plaintext[bs:be], ciphertext[bs:be])
+	}
+	msg, err := Pkcs7Unpad(plaintext, blocksize)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return msg
 }
