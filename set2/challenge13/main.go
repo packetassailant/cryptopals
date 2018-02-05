@@ -8,7 +8,7 @@
 // 5. Append Byte slice User blocks + Escalated block
 // 6. Decrypt and you should see something like "email=pwned@bar.com&uid=10&role=admin"
 
-// Why this works: 	ECB is stateless and nondeterministic so every block is encrypted with the same key, but unaware of \
+// Why this works: ECB is stateless and nondeterministic so every block is encrypted with the same key, but unaware of \
 // the prior or following block. Therefore, cutting along a block boundary and pasting into the ciphertext \
 // is a valid operation.
 
