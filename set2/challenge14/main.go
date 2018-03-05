@@ -98,7 +98,7 @@ func detectOracleSize() int {
 			log.Fatal(err)
 		}
 		if len(ciphertextNew) > len(ciphertextOrig) {
-			return len(ciphertextNew) - count
+			return len(ciphertextOrig) - count
 		}
 		count++
 	}
@@ -107,18 +107,19 @@ func detectOracleSize() int {
 func bruteOracle(blocksize, preSizeRnd, prePadSize, oraclesize int) []byte {
 	unknownStringSize := oraclesize - preSizeRnd - prePadSize
 	var unknownResult []byte
-	unknownStringSizeRnd := (unknownStringSize/blocksize + 1) * blocksize
+	unknownStringSizeRnd := ((unknownStringSize / blocksize) + 1) * blocksize
+
 	for x := unknownStringSizeRnd - 1; x > 0; x-- {
 		bruteChars := strings.Repeat("A", x+prePadSize)
 		ciphertextOne, _ := encryptionOracle(bruteChars)
-		ciphertextOne = ciphertextOne[preSizeRnd : unknownStringSizeRnd+preSizeRnd]
+		ciphertextOneA := ciphertextOne[preSizeRnd : unknownStringSizeRnd+preSizeRnd]
 		for char := 0; char <= 256; char++ {
 			seedChars := []byte(bruteChars)
 			seedChars = append(seedChars, unknownResult...)
 			seedChars = append(seedChars, []byte(string(char))...)
 			ciphertextTwo, _ := encryptionOracle(string(seedChars))
-			ciphertextTwo = ciphertextTwo[preSizeRnd : unknownStringSizeRnd+preSizeRnd]
-			if bytes.Equal(ciphertextOne, ciphertextTwo) {
+			ciphertextTwoA := ciphertextTwo[preSizeRnd : unknownStringSizeRnd+preSizeRnd]
+			if bytes.Equal(ciphertextOneA, ciphertextTwoA) {
 				unknownResult = append(unknownResult, []byte(string(char))...)
 				break
 			}
